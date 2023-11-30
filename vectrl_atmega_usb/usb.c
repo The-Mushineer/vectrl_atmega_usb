@@ -27,8 +27,8 @@ static uint8_t this_interrupt =
     https://usb.org/document-library/hid-descriptor-tool
 */
 static const uint8_t ctrl_report_descriptor[] PROGMEM = {
-	0x06, 0x00, 0xff,              // USAGE_PAGE (Vendor Defined Page 1)
-	0x09, 0x01,                    // USAGE (Vendor Usage 1)
+	0x05, 0x01,                    // USAGE_PAGE (Generic Desktop)
+	0x09, 0x05,                    // USAGE (Game Pad)
 	0xa1, 0x01,                    // COLLECTION (Application)
 	0x05, 0x01,                    //   USAGE_PAGE (Generic Desktop)
 	0x09, 0x37,                    //   USAGE (Dial)
@@ -55,7 +55,7 @@ static const uint8_t ctrl_report_descriptor[] PROGMEM = {
 static const device_descriptor_t device_descriptor PROGMEM = {
 	.length = sizeof(device_descriptor_t),
 	.descriptor_type = DESCRIPTOR_DEVICE, // The type of descriptor
-	.usb_version_bcd = {0x00, 0x02}, // The USB protcol supported
+	.usb_version_bcd = {0x00, 0x01}, // The USB protcol supported
 	.device_class = 0, // The Device Class, 0 indicating that the HID interface will specify it
 	.device_subclass = 0, // HID will specify
 	.device_protocol = 0, // No class specific protocols on a device level
@@ -77,7 +77,7 @@ static const configuration_descriptor_tree_t configuration_descriptor_tree PROGM
 		.num_interfaces = 1, // 1 interface
 		.configuration_value = 1,
 		.configuration_description_idx = 0, // no string descriptors
-		.attributes = CFG_ATTR_RESERVED | CFG_ATTR_REMOTE_WAKEUP,
+		.attributes = CFG_ATTR_BUS_POWERED | CFG_ATTR_REMOTE_WAKEUP,
 		.max_power = 50, // 100mA
 	},
 	.interface_descriptor = {
@@ -89,7 +89,7 @@ static const configuration_descriptor_tree_t configuration_descriptor_tree PROGM
 		.interface_class = IF_CLASS_HID,
 		.interface_sub_class = IF_SUBCLASS_HID_NONE,
 		.interface_protocol = IF_PROTOCOL_HID_NONE,
-		.interface_description_idx = 2,
+		.interface_description_idx = 0,
 	},
 	.hid_descriptor = {
 		.length = sizeof(hid_descriptor_t) + sizeof(report_descriptor_item_t) * 1,
@@ -107,10 +107,10 @@ static const configuration_descriptor_tree_t configuration_descriptor_tree PROGM
 	.endpoint_descriptor = {
 		.length = sizeof(endpoint_descriptor_t),
 		.descriptor_type = DESCRIPTOR_ENDPOINT,
-		.endpoint_address = KEYBOARD_ENDPOINT_NUM | 0x80,  // set endpoint to IN endpoint
+		.endpoint_address = CONTROLLER_ENDPOINT_NUM | 0x80,  // set endpoint to IN endpoint
 		.attributes = 0x03, // set to interrupt
 		.max_packet_size = {8, 0}, // size of the banks
-		.interval = 0x01, // poll for new data once every ms
+		.interval = 0x0A, // poll for new data once every 10 ms
 		},
 };
 
@@ -192,7 +192,7 @@ int usb_send(int8_t encoder0, uint8_t pressed_btn[], uint8_t count) {
 	if (!usb_config_status)
 		return -1;  // Why are you even trying
 	cli();
-	UENUM = KEYBOARD_ENDPOINT_NUM;
+	UENUM = CONTROLLER_ENDPOINT_NUM;
 	
 	for (uint8_t idx = 0; idx < count; idx++) {		
 		pressed_buttons[idx] = pressed_btn[idx];
@@ -246,7 +246,7 @@ ISR(USB_GEN_vect) {
     this_interrupt++;
     if (keyboard_idle_value &&
         (this_interrupt & 3) == 0) {  // Scaling by four, trying to save memory
-      UENUM = KEYBOARD_ENDPOINT_NUM;
+      UENUM = CONTROLLER_ENDPOINT_NUM;
       if (UEINTX & (1 << RWAL)) {  // Check if banks are writable
         current_idle++;
         if (current_idle ==
@@ -281,39 +281,53 @@ ISR(USB_COM_vect) {
       const uint8_t* descriptor;
       uint16_t descriptor_length;
 
-      if (wValue == 0x0100) {  // Is the host requesting a device descriptor?
-        descriptor = (uint8_t*) &device_descriptor;
-        descriptor_length = pgm_read_byte(descriptor);
-      } else if (wValue ==
-                 0x0200) {  // Is it asking for a configuration descriptor?
-        descriptor = (uint8_t*) &configuration_descriptor_tree;
-        descriptor_length = configuration_descriptor_tree.configuration_descriptor.total_length[1];
-		descriptor_length <<= 8;
-        descriptor_length |= configuration_descriptor_tree.configuration_descriptor.total_length[0];
-      } else if (wValue ==
-                 0x2100) {  // Is it asking for a HID Report Descriptor?
-	    descriptor = (uint8_t*) &configuration_descriptor_tree.hid_descriptor;
-        descriptor_length = pgm_read_byte(descriptor);
-      } else if (wValue == 0x2200) {
-		  descriptor = ctrl_report_descriptor;
-		  descriptor_length = sizeof(ctrl_report_descriptor);
-      } else if (wValue == 0x0300) {
-		  descriptor = string_descriptor_zero;
-		  descriptor_length = sizeof(string_descriptor_zero);
-      } else if (wValue == 0x0301) {
-		  descriptor = string_descriptor_manufacturer_name;
-		  descriptor_length = sizeof(string_descriptor_manufacturer_name);
-      } else if (wValue == 0x0302) {
-		  descriptor = string_descriptor_product_name;
-		  descriptor_length = sizeof(string_descriptor_product_name);
-      } else if (wValue == 0x0303) {
-		  descriptor = string_descriptor_serial;
-		  descriptor_length = sizeof(string_descriptor_serial);
-      } else {
-        UECONX |=
-            (1 << STALLRQ) | (1 << EPEN);  // Enable the endpoint and stall, the
-                                           // descriptor does not exist
-        return;
+      switch (wValue) {
+	      case 0x0100:   // Is the host requesting a device descriptor?
+	      descriptor = (uint8_t*) &device_descriptor;
+	      descriptor_length = pgm_read_byte(descriptor);
+	      break;
+		  
+	      case 0x0200:   // Is it asking for a configuration descriptor?
+	      descriptor = (uint8_t*) &configuration_descriptor_tree;
+	      descriptor_length = configuration_descriptor_tree.configuration_descriptor.total_length[1];
+	      descriptor_length <<= 8;
+	      descriptor_length |= configuration_descriptor_tree.configuration_descriptor.total_length[0];
+	      break;
+		  
+	      case 0x2100:  // Is it asking for a HID Descriptor?
+	      descriptor = (uint8_t*) &configuration_descriptor_tree.hid_descriptor;
+	      descriptor_length = pgm_read_byte(descriptor);
+	      break;
+		  
+	      case 0x2200: // Is it asking for the  HID Report Descriptor?
+	      descriptor = ctrl_report_descriptor;
+	      descriptor_length = sizeof(ctrl_report_descriptor);
+	      break;
+		  
+	      case 0x0300: // String descriptor 0
+	      descriptor = string_descriptor_zero;
+	      descriptor_length = sizeof(string_descriptor_zero);
+	      break;
+		  
+	      case 0x0301: // String descriptor 1
+	      descriptor = string_descriptor_manufacturer_name;
+	      descriptor_length = sizeof(string_descriptor_manufacturer_name);
+	      break;
+		  
+	      case 0x0302: // String descriptor 2
+	      descriptor = string_descriptor_product_name;
+	      descriptor_length = sizeof(string_descriptor_product_name);
+	      break;
+		  
+	      case 0x0303: // String descriptor 3
+	      descriptor = string_descriptor_serial;
+	      descriptor_length = sizeof(string_descriptor_serial);
+	      break;
+		  
+	      default:
+	      // Enable the endpoint and stall, the descriptor does not exist
+	      UECONX |= (1 << STALLRQ) | (1 << EPEN);
+	      return;
       }
 
       uint8_t request_length =
@@ -360,7 +374,7 @@ ISR(USB_COM_vect) {
                   // to place the device into address mode
       usb_config_status = wValue;
       UEINTX &= ~(1 << TXINI);
-      UENUM = KEYBOARD_ENDPOINT_NUM;
+      UENUM = CONTROLLER_ENDPOINT_NUM;
       UECONX = 1;
       UECFG0X = 0b11000001;  // EPTYPE Interrupt IN
       UECFG1X = 0b00000110;  // Dual Bank Endpoint, 8 Bytes, allocate memory

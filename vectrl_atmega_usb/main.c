@@ -105,6 +105,7 @@ int main(void)
 		} else {
 			PORTD |= (1<<5);
 		}
+		
 		for (uint8_t idx = 0; idx < 4; idx++) {
 			if ((btn_port & 1) == 0) {
 				pressed_btns[pressed_btn_count] = idx + 1;

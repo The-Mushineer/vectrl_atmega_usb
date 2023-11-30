@@ -16,7 +16,7 @@ Based on: https://github.com/kmani314/ATMega32u4-HID-Keyboard
 #define DESCRIPTOR_HID_REPORT 0x22
 
 
-#define CFG_ATTR_RESERVED      0x80
+#define CFG_ATTR_BUS_POWERED   0x80
 #define CFG_ATTR_SELF_POWERED  0x40
 #define CFG_ATTR_REMOTE_WAKEUP 0x20
 
@@ -117,7 +117,7 @@ int usb_send(int8_t encoder0, uint8_t pressed_btn[], uint8_t count);
 #define ID_VENDOR 0x05dc  // from https://github.com/obdev/v-usb/blob/master/usbdrv/USB-IDs-for-free.txt
 #define ID_PRODUCT 0x16c0  // Generic HID device
 // have legitimate IDs)
-#define KEYBOARD_ENDPOINT_NUM 1  // The second endpoint is the HID endpoint
+#define CONTROLLER_ENDPOINT_NUM 1
 
 // HID Class-specific request codes - refer to HID Class Specification
 // Chapter 7.2 - Remarks

@@ -1,9 +1,9 @@
 // D:\Projetos\vectrl_atmega_usb\report-descriptor-1.h
 
 
-char ReportDescriptor[38] = {
-    0x06, 0x00, 0xff,              // USAGE_PAGE (Vendor Defined Page 1)
-    0x09, 0x01,                    // USAGE (Vendor Usage 1)
+char ReportDescriptor[37] = {
+    0x05, 0x01,                    // USAGE_PAGE (Generic Desktop)
+    0x09, 0x05,                    // USAGE (Game Pad)
     0xa1, 0x01,                    // COLLECTION (Application)
     0x05, 0x01,                    //   USAGE_PAGE (Generic Desktop)
     0x09, 0x37,                    //   USAGE (Dial)
