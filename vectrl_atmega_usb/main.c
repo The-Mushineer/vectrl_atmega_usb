@@ -45,6 +45,21 @@ const uint8_t ENC_STATE_TABLE[7][4] = {
 	{ENC_STATE_CCW_MIDDLE, ENC_STATE_START     , ENC_STATE_CCW_END   , ENC_STATE_START | ENC_TURNED_CCW},
 };
 
+const uint8_t BUTTON_MAP[4][3] = {
+	{
+		1, 5, 7
+	},
+	{
+		2, 0, 0
+	},
+	{
+		3, 6, 8,
+	},
+	{
+		4, 9, 0
+	}
+};
+
 volatile int8_t enc0_counter = 0;
 volatile uint8_t enc0_state = 0;
 
@@ -68,7 +83,7 @@ ISR(INT1_vect) {
 
 int main(void)
 {
-	uint8_t pressed_btns[6];
+	uint8_t pressed_btns[9];
 	uint8_t pressed_btn_count = 0;
 	uint8_t btn_port = 0;
 	int8_t enc0_local = 0;
@@ -77,9 +92,11 @@ int main(void)
 	// sets up port D (board LED and encoder)
 	DDRD = 1 << 5; // LED set as output
 	PORTD = 0x00;
-	// sets up port B (buttons)
+	// sets up port B (button rows)
 	DDRB = 0; // all pins set as inputs
-	PORTB = 0x1E; // activate pull-up resistors in pins 1 to 4 
+	// sets up port F (button columns)
+	DDRF = 0x00; // F4 - F7 as inputs
+	PORTF = 0xF0; // Activates pull-ups for F4-F7
 	// initializes USB	
 	usb_init();
 	// sets up interrupts
@@ -99,20 +116,28 @@ int main(void)
 	while(1)
 	{
 		pressed_btn_count = 0;
-		btn_port = (PINB >> 1) & 0x0F;
-		if (btn_port == 0) {
+		/*if (btn_port == 0) {
 			PORTD &= ~(1<<5);
 		} else {
 			PORTD |= (1<<5);
-		}
+		}*/
 		
-		for (uint8_t idx = 0; idx < 4; idx++) {
-			if ((btn_port & 1) == 0) {
-				pressed_btns[pressed_btn_count] = idx + 1;
-				pressed_btn_count++;
+		for (uint8_t row = 0; row < 3; row++) {
+			uint8_t rowBit = 1 << (row + 1);
+			DDRB = rowBit; // Sets column as output
+			PORTB = 0x0E & ~rowBit; // Sets column to low
+			_delay_ms(1);
+			btn_port = (~(PINF >> 4)) & 0x0F;
+			for (uint8_t col=0; col < 4; col++) {			
+				uint8_t button_index = BUTTON_MAP[col][row];
+				if ((btn_port & 1)!= 0 && button_index > 0) {
+					pressed_btns[pressed_btn_count] = button_index;
+					pressed_btn_count++;
+				}
+				btn_port >>= 1;
 			}
-			btn_port >>= 1;
 		}
+
 		cli();
 		enc0_local = enc0_counter;
 		enc0_counter = 0;

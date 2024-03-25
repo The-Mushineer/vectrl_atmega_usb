@@ -12,7 +12,7 @@ Based on: https://github.com/kmani314/ATMega32u4-HID-Keyboard
 #include "avr/io.h"
 
 
-volatile uint8_t pressed_buttons[6] = {0, 0, 0, 0, 0, 0};
+volatile uint8_t pressed_buttons[9] = {0};
 
 static uint16_t keyboard_idle_value =
     125;  // HID Idle setting, how often the device resends unchanging reports,
@@ -197,7 +197,7 @@ int usb_send(int8_t encoder0, uint8_t pressed_btn[], uint8_t count) {
 	for (uint8_t idx = 0; idx < count; idx++) {		
 		pressed_buttons[idx] = pressed_btn[idx];
 	}
-	for (uint8_t idx = count; idx < 6; idx++) {
+	for (uint8_t idx = count; idx < 9; idx++) {
 		pressed_buttons[idx] = 0;
 	}
 
